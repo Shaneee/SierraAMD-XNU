@@ -340,7 +340,7 @@ bool IOCatalogue::addDrivers(
                     if (strcmp(blacklistMods[n].name, modNameStr))
                         continue;
                     if (!blacklistMods[n].hits++)
-                        printf("Warning: %s\n Has been blacklisted.",
+                        printf("Warning: The following kext as been blacklisted %s\n.",
                             modNameStr);
                     shouldMatch = FALSE;
                 }
@@ -359,7 +359,7 @@ bool IOCatalogue::addDrivers(
                     if (strcmp(confblacklistMods[n].name, modNameStr))
                         continue;
                     if (!confblacklistMods[n].hits++)
-                        printf("Warning: %s\n Has been blacklisted.", modNameStr);
+                        printf("Warning: The following kext as been blacklisted %s\n.", modNameStr);
                     shouldMatch = FALSE;
                 }
                 if (!shouldMatch)
