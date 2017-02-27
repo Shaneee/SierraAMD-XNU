@@ -74,6 +74,7 @@
 int		rtclock_init(void);
 
 uint64_t	tsc_rebase_abs_time = 0;
+uint32_t	rtclock_boot_frequency = 0;
 
 static void	rtc_set_timescale(uint64_t cycles);
 static uint64_t	rtc_export_speed(uint64_t cycles);
@@ -231,14 +232,52 @@ void
 rtc_clock_stepping(__unused uint32_t new_frequency,
 		   __unused uint32_t old_frequency)
 {
-	panic("rtc_clock_stepping unsupported");
+	//panic("rtc_clock_stepping unsupported");
+	/* mercurysquad: Re-implemented 2009-05-24
+  	 * note that after stepping, we restore the ns base to the saved value
+  	 * but there might have been a finite interval during which the stepping
+   	 * took place, which will be unaccounted for. FIXME: use another timer
+   	 * source to correct for this
+     * AnV: Mods for 10.7 and above done
+     */
+  	pal_rtc_nanotime_t	*rntp = &pal_rtc_nanotime_info;
+   	boolean_t	istate;
+
+   	istate = ml_set_interrupts_enabled(FALSE);
+
+    rntp->ns_base = rtc_nanotime_read(); // save current ns base
+    rntp->tsc_base = rdtsc64();
+    
+    ml_set_interrupts_enabled(istate);
 }
 
 void
 rtc_clock_stepped(__unused uint32_t new_frequency,
 		  __unused uint32_t old_frequency)
 {
-	panic("rtc_clock_stepped unsupported");
+	//panic("rtc_clock_stepped unsupported");
+	/* mercurysquad: Re-implement 2009-05-24
+   	 * Originally written by Turbo to use 'slow' clock calculation method
+  	 * Updated to use scaled-tsc fast calculations
+     * AnV: Mods for 10.7 and above done
+     */
+   	pal_rtc_nanotime_t	*rntp = &pal_rtc_nanotime_info;
+   	uint64_t	cycles, ns_base;
+   	boolean_t	istate;
+
+   	if (rtclock_boot_frequency == 0) /* first step since boot time */
+   		rtclock_boot_frequency = old_frequency;
+
+   	cycles = (new_frequency * tscFreq / rtclock_boot_frequency);
+   	ns_base = rntp->ns_base;
+
+   	istate = ml_set_interrupts_enabled(FALSE);
+
+   	rntp->scale = (uint32_t)(((uint64_t)NSEC_PER_SEC << 32) / (cycles  * RTCLOCK_SCALE_UP_BY));
+   	rntp->shift = 32; // just to be safe, though this was already set at bootup
+   	rtc_nanotime_init(ns_base);
+
+   	ml_set_interrupts_enabled(istate);
 }
 
 /*
@@ -541,6 +580,9 @@ nanoseconds_to_absolutetime(
 	uint64_t		nanoseconds,
 	uint64_t		*result)
 {
+    if (nanoseconds == ~(0ULL))
+    *result = 2ULL;
+    else
 	*result = nanoseconds;
 }
 

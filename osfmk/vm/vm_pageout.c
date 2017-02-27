@@ -7301,10 +7301,10 @@ process_upl_to_commit:
 					 * so it will need to be
 					 * re-validated.
 					 */
-					if (m->slid) {
+					/*if (m->slid) {
 						panic("upl_commit_range(%p): page %p was slid\n",
 						      upl, m);
-					}
+					}*/
 					assert(!m->slid);
 					m->cs_validated = FALSE;
 #if DEVELOPMENT || DEBUG
@@ -10922,7 +10922,7 @@ vm_page_slide(
 	return kr;
 }
 
-void inline memoryshot(unsigned int event, unsigned int control)
+void memoryshot(unsigned int event, unsigned int control)
 {
 	if (vm_debug_events) {
 		KERNEL_DEBUG_CONSTANT1((MACHDBG_CODE(DBG_MACH_VM_PRESSURE, event)) | control,

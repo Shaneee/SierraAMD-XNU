@@ -544,9 +544,9 @@ cpu_desc_load64(cpu_data_t *cdp)
 static void
 fast_syscall_init64(__unused cpu_data_t *cdp)
 {
-	wrmsr64(MSR_IA32_SYSENTER_CS, SYSENTER_CS); 
-	wrmsr64(MSR_IA32_SYSENTER_EIP, (uintptr_t) hi64_sysenter);
-	wrmsr64(MSR_IA32_SYSENTER_ESP, current_sstk());
+	//wrmsr64(MSR_IA32_SYSENTER_CS, SYSENTER_CS); 
+	//wrmsr64(MSR_IA32_SYSENTER_EIP, (uintptr_t) hi64_sysenter);
+	//wrmsr64(MSR_IA32_SYSENTER_ESP, current_sstk());
 	/* Enable syscall/sysret */
 	wrmsr64(MSR_IA32_EFER, rdmsr64(MSR_IA32_EFER) | MSR_IA32_EFER_SCE);
 

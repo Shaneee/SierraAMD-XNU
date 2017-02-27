@@ -300,7 +300,8 @@ bool IOCatalogue::addDrivers(
     OSOrderedSet         * set = NULL;        // must release
     OSObject             * object = NULL;       // do not release
     OSArray              * persons = NULL;    // do not release
-    
+    OSString             * moduleName;
+    bool                   ret;    
     persons = OSDynamicCast(OSArray, drivers);
     if (!persons) {
         goto finish;
@@ -328,6 +329,53 @@ bool IOCatalogue::addDrivers(
 
         OSDictionary * personality = OSDynamicCast(OSDictionary, object);
 
+        if (blacklistEnabled) {
+            OSString *modName = OSDynamicCast(OSString, personality->getObject(gIOModuleIdentifierKey));
+            const char *modNameStr = NULL;
+            if (modName)
+                modNameStr = modName->getCStringNoCopy();
+            if (modNameStr) {
+                boolean_t shouldMatch = TRUE;
+                for (uint32_t n = 0; blacklistMods[n].name; n++) {
+                    if (strcmp(blacklistMods[n].name, modNameStr))
+                        continue;
+                    if (!blacklistMods[n].hits++)
+                        printf("Warning: %s\n Has been blacklisted.",
+                            modNameStr);
+                    shouldMatch = FALSE;
+                }
+                if (!shouldMatch)
+                    continue;
+            }
+        }
+        if (confblacklistEnabled) {
+            OSString *modName = OSDynamicCast(OSString, personality->getObject(gIOModuleIdentifierKey));
+            const char *modNameStr = NULL;
+            if (modName)
+                modNameStr = modName->getCStringNoCopy();
+            if (modNameStr) {
+                boolean_t shouldMatch = TRUE;
+                for (uint32_t n = 0; n < confblacklistCount; n++) {
+                    if (strcmp(confblacklistMods[n].name, modNameStr))
+                        continue;
+                    if (!confblacklistMods[n].hits++)
+                        printf("Warning: %s\n Has been blacklisted.", modNameStr);
+                    shouldMatch = FALSE;
+                }
+                if (!shouldMatch)
+                    continue;
+            }
+        }
+        if ((moduleName = OSDynamicCast(OSString, personality->getObject("OSBundleModuleDemand"))))
+        {
+            IORWLockUnlock(lock);
+            ret = OSKext::loadKextWithIdentifier(moduleName->getCStringNoCopy(), false);
+            IORWLockWrite(lock);
+            ret = true;
+        }
+        else
+/*** in else Start ***/
+        {
         SInt count;
 
         if (!personality) {
@@ -372,6 +420,8 @@ bool IOCatalogue::addDrivers(
         }
 
 	set->setObject(personality);        
+    }
+/*** in else END ***/
     }
     // Start device matching.
     if (result && doNubMatching && (set->getCount() > 0)) {

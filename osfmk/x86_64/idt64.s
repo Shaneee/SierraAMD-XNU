@@ -280,8 +280,8 @@ L_dispatch_U32_after_fault:
 L_common_dispatch:
 	cld		/* Ensure the direction flag is clear in the kernel */
 	cmpl    $0, EXT(pmap_smap_enabled)(%rip)
-	je	1f
-	clac		/* Clear EFLAGS.AC if SMAP is present/enabled */
+	jmp	1f
+	/* clac */		/* Clear EFLAGS.AC if SMAP is present/enabled */
 1:
 	/*
 	 * On entering the kernel, we typically don't switch CR3

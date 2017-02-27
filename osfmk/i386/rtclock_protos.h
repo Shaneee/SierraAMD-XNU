@@ -40,6 +40,10 @@
 #ifndef _I386_RTCLOCK_PROTOS_H_
 #define _I386_RTCLOCK_PROTOS_H_
 
+#define	RTCLOCK_SCALE_UP_BITS	4		/* mercurysquad: Refer to rtclock.c */
+#define	RTCLOCK_SCALE_UP_BY	(1 << RTCLOCK_SCALE_UP_BITS)
+#define	RTCLOCK_SCALE_UP_MASK	(RTCLOCK_SCALE_UP_BY - 1)
+
 typedef struct pal_rtc_nanotime pal_rtc_nanotime_t;
 extern uint64_t tsc_rebase_abs_time;
 

@@ -29,6 +29,7 @@
 #include <mach/machine.h>
 #include <mach/processor.h>
 #include <kern/kalloc.h>
+#include <i386/cpuid.h>
 #include <i386/cpu_affinity.h>
 #include <i386/cpu_topology.h>
 #include <i386/cpu_threads.h>
@@ -145,8 +146,15 @@ cpu_topology_sort(int ncpus)
 		x86_cpu_cache_t		*LLC_cachep;
 		x86_affinity_set_t	*aset;
 
-		LLC_cachep = lcpup->caches[topoParms.LLCDepth];
-		assert(LLC_cachep->type == CPU_CACHE_TYPE_UNIF);
+        if (IsIntelCPU())
+        {
+            LLC_cachep = lcpup->caches[topoParms.LLCDepth];
+        } else {
+            LLC_cachep = lcpup->caches[topoParms.LLCDepth+1];
+        }
+
+		//assert(LLC_cachep->type == CPU_CACHE_TYPE_UNIF);
+
 		aset = find_cache_affinity(LLC_cachep); 
 		if (aset == NULL) {
 			aset = (x86_affinity_set_t *) kalloc(sizeof(*aset));

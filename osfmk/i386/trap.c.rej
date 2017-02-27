@@ -1,0 +1,63 @@
+***************
+*** 112,123 ****
+  extern void throttle_lowpri_io(int);
+  extern void kprint_state(x86_saved_state64_t *saved_state);
+  
+  /*
+   * Forward declarations
+   */
+  static void user_page_fault_continue(kern_return_t kret);
+- static void panic_trap(x86_saved_state64_t *saved_state, uint32_t pl);
+- static void set_recovery_ip(x86_saved_state64_t *saved_state, vm_offset_t ip);
+  
+  volatile perfCallback perfTrapHook = NULL; /* Pointer to CHUD trap hook routine */
+  
+--- 112,130 ----
+  extern void throttle_lowpri_io(int);
+  extern void kprint_state(x86_saved_state64_t *saved_state);
+  
++ /************** sysenter/sysexit Patch Start **************/
++ extern void mach_call_munger(x86_saved_state_t *state);
++ extern void unix_syscall(x86_saved_state_t *);
++ 
++ extern unsigned char opemu_ktrap(x86_saved_state_t *state);
++ extern void opemu_utrap(x86_saved_state_t *state);
++ 
+  /*
+   * Forward declarations
+   */
+  static void user_page_fault_continue(kern_return_t kret);
++ void panic_trap(x86_saved_state64_t *saved_state, uint32_t pl);
++ void set_recovery_ip(x86_saved_state64_t *saved_state, vm_offset_t ip);
+  
+  volatile perfCallback perfTrapHook = NULL; /* Pointer to CHUD trap hook routine */
+  
+***************
+*** 799,811 ****
+  }
+  
+  
+- static void
+  set_recovery_ip(x86_saved_state64_t  *saved_state, vm_offset_t ip)
+  {
+          saved_state->isf.rip = ip;
+  }
+  
+- static void
+  panic_trap(x86_saved_state64_t *regs, uint32_t pl)
+  {
+  	const char	*trapname = "Unknown";
+--- 842,854 ----
+  }
+  
+  
++ void
+  set_recovery_ip(x86_saved_state64_t  *saved_state, vm_offset_t ip)
+  {
+          saved_state->isf.rip = ip;
+  }
+  
++ void
+  panic_trap(x86_saved_state64_t *regs, uint32_t pl)
+  {
+  	const char	*trapname = "Unknown";

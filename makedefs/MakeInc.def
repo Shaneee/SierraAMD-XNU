@@ -89,38 +89,38 @@ GENASSYM_KCC = $(CC)
 # Compiler warning flags
 #
 
-CWARNFLAGS_STD = \
-	-Weverything -Werror -Wextra -Wstrict-prototypes \
-	-Wmissing-prototypes -Wpointer-arith -Wreturn-type -Wcast-qual \
-	-Wwrite-strings -Wswitch -Wshadow -Wcast-align -Wchar-subscripts \
-	-Winline -Wnested-externs -Wredundant-decls -Wextra-tokens \
-	-Wunreachable-code \
-	-Wno-assign-enum \
-	-Wno-bad-function-cast \
-	-Wno-c++98-compat \
-	-Wno-c++-compat \
-	-Wno-conditional-uninitialized \
-	-Wno-conversion \
-	-Wno-covered-switch-default \
-	-Wno-disabled-macro-expansion \
-	-Wno-documentation-unknown-command \
-	-Wno-format-non-iso \
-	-Wno-format-nonliteral \
-	-Wno-reserved-id-macro \
-	-Wno-language-extension-token \
-	-Wno-missing-variable-declarations \
-	-Wno-packed \
-	-Wno-padded \
-	-Wno-partial-availability \
-	-Wno-pedantic \
-	-Wno-shift-sign-overflow \
-	-Wno-switch-enum \
-	-Wno-undef \
-	-Wno-unused-macros \
-	-Wno-used-but-marked-unused \
-	-Wno-variadic-macros \
-	-Wno-vla \
-	-Wno-zero-length-array
+#CWARNFLAGS_STD = \
+#	-Weverything -Werror -Wextra -Wstrict-prototypes \
+#	-Wmissing-prototypes -Wpointer-arith -Wreturn-type -Wcast-qual \
+#	-Wwrite-strings -Wswitch -Wshadow -Wcast-align -Wchar-subscripts \
+#	-Winline -Wnested-externs -Wredundant-decls -Wextra-tokens \
+#	-Wunreachable-code \
+#	-Wno-assign-enum \
+#	-Wno-bad-function-cast \
+#	-Wno-c++98-compat \
+#	-Wno-c++-compat \
+#	-Wno-conditional-uninitialized \
+#	-Wno-conversion \
+#	-Wno-covered-switch-default \
+#	-Wno-disabled-macro-expansion \
+#	-Wno-documentation-unknown-command \
+#	-Wno-format-non-iso \
+#	-Wno-format-nonliteral \
+#	-Wno-reserved-id-macro \
+#	-Wno-language-extension-token \
+#	-Wno-missing-variable-declarations \
+#	-Wno-packed \
+#	-Wno-padded \
+#	-Wno-partial-availability \
+#	-Wno-pedantic \
+#	-Wno-shift-sign-overflow \
+#	-Wno-switch-enum \
+#	-Wno-undef \
+#	-Wno-unused-macros \
+#	-Wno-used-but-marked-unused \
+#	-Wno-variadic-macros \
+#	-Wno-vla \
+#	-Wno-zero-length-array
 
 # Can be overridden in Makefile.template or Makefile.$arch
 export CWARNFLAGS ?= $(CWARNFLAGS_STD)
@@ -129,41 +129,41 @@ define add_perfile_cflags
 $(1)_CWARNFLAGS_ADD += $2
 endef
 
-CXXWARNFLAGS_STD = \
-	-Weverything -Werror -Wextra -Wpointer-arith -Wreturn-type \
-	-Wcast-qual -Wwrite-strings -Wswitch -Wcast-align -Wchar-subscripts \
-	-Wredundant-decls -Wextra-tokens \
-	-Wunreachable-code \
-	-Wno-assign-enum \
-	-Wno-bad-function-cast \
-	-Wno-c++98-compat \
-	-Wno-c++98-compat-pedantic \
-	-Wno-c++-compat \
-	-Wno-conditional-uninitialized \
-	-Wno-conversion \
-	-Wno-covered-switch-default \
-	-Wno-disabled-macro-expansion \
-	-Wno-documentation-unknown-command \
-	-Wno-exit-time-destructors \
-	-Wno-format-non-iso \
-	-Wno-format-nonliteral \
-	-Wno-global-constructors \
-	-Wno-reserved-id-macro \
-	-Wno-language-extension-token \
-	-Wno-missing-variable-declarations \
-	-Wno-old-style-cast \
-	-Wno-packed \
-	-Wno-padded \
-	-Wno-partial-availability \
-	-Wno-pedantic \
-	-Wno-shift-sign-overflow \
-	-Wno-switch-enum \
-	-Wno-undef \
-	-Wno-unused-macros \
-	-Wno-used-but-marked-unused \
-	-Wno-variadic-macros \
-	-Wno-vla \
-	-Wno-zero-length-array
+#CXXWARNFLAGS_STD = \
+#	-Weverything -Werror -Wextra -Wpointer-arith -Wreturn-type \
+#	-Wcast-qual -Wwrite-strings -Wswitch -Wcast-align -Wchar-subscripts \
+#	-Wredundant-decls -Wextra-tokens \
+#	-Wunreachable-code \
+#	-Wno-assign-enum \
+#	-Wno-bad-function-cast \
+#	-Wno-c++98-compat \
+#	-Wno-c++98-compat-pedantic \
+#	-Wno-c++-compat \
+#	-Wno-conditional-uninitialized \
+#	-Wno-conversion \
+#	-Wno-covered-switch-default \
+#	-Wno-disabled-macro-expansion \
+#	-Wno-documentation-unknown-command \
+#	-Wno-exit-time-destructors \
+#	-Wno-format-non-iso \
+#	-Wno-format-nonliteral \
+#	-Wno-global-constructors \
+#	-Wno-reserved-id-macro \
+#	-Wno-language-extension-token \
+#	-Wno-missing-variable-declarations \
+#	-Wno-old-style-cast \
+#	-Wno-packed \
+#	-Wno-padded \
+#	-Wno-partial-availability \
+#	-Wno-pedantic \
+#	-Wno-shift-sign-overflow \
+#	-Wno-switch-enum \
+#	-Wno-undef \
+#	-Wno-unused-macros \
+#	-Wno-used-but-marked-unused \
+#	-Wno-variadic-macros \
+#	-Wno-vla \
+#	-Wno-zero-length-array
 
 # overloaded-virtual warnings are non-fatal (9000888)
 CXXWARNFLAGS_STD += -Wno-error=overloaded-virtual

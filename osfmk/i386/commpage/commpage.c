@@ -124,7 +124,7 @@ commpage_allocate(
 	kern_return_t	kr;
 
 	if (submap == NULL)
-		panic("commpage submap is null");
+		printf("commpage submap is null");
 
 	if ((kr = vm_map(kernel_map,
 			 &kernel_addr,
@@ -137,14 +137,15 @@ commpage_allocate(
 			 VM_PROT_ALL,
 			 VM_PROT_ALL,
 			 VM_INHERIT_NONE)))
-		panic("cannot allocate commpage %d", kr);
+		printf("cannot allocate commpage %d", kr);
 
 	if ((kr = vm_map_wire(kernel_map,
 			      kernel_addr,
 			      kernel_addr+area_used,
 			      VM_PROT_DEFAULT|VM_PROT_MEMORY_TAG_MAKE(VM_KERN_MEMORY_OSFMK),
 			      FALSE)))
-		panic("cannot wire commpage: %d", kr);
+		printf("cannot wire commpage: %d", kr);
+
 
 	/* 
 	 * Now that the object is created and wired into the kernel map, mark it so that no delay
@@ -155,7 +156,7 @@ commpage_allocate(
 	 * JMM - What we really need is a way to create it like this in the first place.
 	 */
 	if (!(kr = vm_map_lookup_entry( kernel_map, vm_map_trunc_page(kernel_addr, VM_MAP_PAGE_MASK(kernel_map)), &entry) || entry->is_sub_map))
-		panic("cannot find commpage entry %d", kr);
+		printf("cannot find commpage entry %d", kr);
 	VME_OBJECT(entry)->copy_strategy = MEMORY_OBJECT_COPY_NONE;
 
 	if ((kr = mach_make_memory_entry( kernel_map,		// target map
@@ -164,7 +165,7 @@ commpage_allocate(
 				    uperm,	// protections as specified
 				    &handle,		// this is the object handle we get
 				    NULL )))		// parent_entry (what is this?)
-		panic("cannot make entry for commpage %d", kr);
+		printf("cannot make entry for commpage %d\n", kr);
 
 	if ((kr = vm_map_64(	submap,				// target map (shared submap)
 			&zero,				// address (map into 1st page in submap)
@@ -177,7 +178,7 @@ commpage_allocate(
 			uperm,   // cur_protection (R-only in user map)
 			uperm,   // max_protection
 		        VM_INHERIT_SHARE )))             // inheritance
-		panic("cannot map commpage %d", kr);
+		printf("cannot map commpage %d\n", kr);
 
 	ipc_port_release(handle);
 	/* Make the kernel mapping non-executable. This cannot be done
@@ -210,7 +211,7 @@ commpage_cpus( void )
 	cpus = ml_get_max_cpus();                   // NB: this call can block
 
 	if (cpus == 0)
-		panic("commpage cpus==0");
+		printf("commpage cpus==0");
 	if (cpus > 0xFF)
 		cpus = 0xFF;
 
@@ -269,11 +270,17 @@ commpage_init_cpu_capabilities( void )
 		default:
 			break;
 	}
-	cpus = commpage_cpus();			// how many CPUs do we have
+    cpus = commpage_cpus();			// how many CPUs do we have
 
-	bits |= (cpus << kNumCPUsShift);
-
-	bits |= kFastThreadLocalStorage;	// we use %gs for TLS
+    if (IsAmdCPU()) {
+        bits |= kHasSSE4_2;
+        bits |= kHasSSE3;
+        bits |= kHasSupplementalSSE3;
+    }
+    
+    bits |= (cpus << kNumCPUsShift);
+    
+    bits |= kFastThreadLocalStorage;	// we use %gs for TLS
 
 #define setif(_bits, _bit, _condition) \
 	if (_condition) _bits |= _bit
@@ -305,12 +312,14 @@ commpage_init_cpu_capabilities( void )
 					CPUID_LEAF7_FEATURE_RDSEED);
 	setif(bits, kHasADX,     cpuid_features() &
 					CPUID_LEAF7_FEATURE_ADX);
-	
-	setif(bits, kHasMPX,     cpuid_leaf7_features() &
-					CPUID_LEAF7_FEATURE_MPX);
-	setif(bits, kHasSGX,     cpuid_leaf7_features() &
-					CPUID_LEAF7_FEATURE_SGX);
-	uint64_t misc_enable = rdmsr64(MSR_IA32_MISC_ENABLE);
+
+	uint64_t misc_enable = 0;
+
+	if (IsIntelCPU())
+	{
+		misc_enable = rdmsr64(MSR_IA32_MISC_ENABLE);
+	}
+
 	setif(bits, kHasENFSTRG, (misc_enable & 1ULL) &&
 				 (cpuid_leaf7_features() &
 					CPUID_LEAF7_FEATURE_ERMS));
@@ -377,7 +386,7 @@ commpage_stuff(
     void	*dest = commpage_addr_of(address);
     
     if (address < next)
-       panic("commpage overlap at address 0x%p, 0x%x < 0x%x", dest, address, next);
+       printf("commpage overlap at address 0x%p, 0x%x < 0x%x\n", dest, address, next);
     
     bcopy(source,dest,length);
     
@@ -453,10 +462,9 @@ commpage_populate_one(
 	commpage_stuff(_COMM_PAGE_CPUFAMILY, &cfamily, 4);
 
 	if (next > _COMM_PAGE_END)
-		panic("commpage overflow: next = 0x%08x, commPagePtr = 0x%p", next, commPagePtr);
+		printf("compare overflow: next = 0x%08x, commPagePtr = 0x%p", next, commPagePtr);
 
 }
-
 
 /* Fill in commpages: called once, during kernel initialization, from the
  * startup thread before user-mode code is running.
@@ -557,7 +565,7 @@ void commpage_text_populate( void ){
 	}
 
 	if (next > _COMM_PAGE_TEXT_END) 
-		panic("commpage text overflow: next=0x%08x, commPagePtr=%p", next, commPagePtr); 
+		printf("commpage text overflow: next=0x%08x, commPagePtr=%p\n", next, commPagePtr);
 
 }
 
@@ -582,11 +590,11 @@ commpage_set_nanotime(
 		return;
 		
 	if ( generation != p32->nt_generation )
-		panic("nanotime trouble 1");	/* possibly not serialized */
+		printf("nanotime trouble 1\n");	/* possibly not serialized */
 	if ( ns_base < p32->nt_ns_base )
-		panic("nanotime trouble 2");
+		printf("nanotime trouble 2\n");
 	if ((shift != 0) && ((_cpu_capabilities & kSlow)==0) )
-		panic("nanotime trouble 3");
+		printf("nanotime trouble 3\n");
 		
 	next_gen = ++generation;
 	if (next_gen == 0)

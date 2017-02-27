@@ -34,6 +34,8 @@ _pmKextRegister
 _rdmsr_carefully
 _real_ncpus
 _rtc_clock_napped
+_rtc_clock_stepped
+_rtc_clock_stepping
 _serial_getc
 _serial_init
 _serial_putc

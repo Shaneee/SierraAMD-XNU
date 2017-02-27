@@ -240,4 +240,23 @@ extern const OSSymbol * gIOClassKey;
 extern const OSSymbol * gIOProbeScoreKey;
 extern IOCatalogue    * gIOCatalogue;
 
+extern "C" {
+/* kaitek: see ::addDrivers() and StartIOKit() for more information about the built-in kernel
+ * kext blacklist. */
+/* AnV - Added configurable blacklist mods */
+    typedef struct {
+        const char *name;
+        uint32_t hits;
+    } blacklist_mod_t;
+    typedef struct {
+        char name[256];
+        uint32_t hits;
+    } blacklist_confmod_t;
+    extern boolean_t blacklistEnabled;
+    extern boolean_t confblacklistEnabled;
+    extern blacklist_mod_t blacklistMods[];
+    extern blacklist_confmod_t confblacklistMods[16];
+    extern uint32_t confblacklistCount;
+};
+
 #endif /* ! _IOKIT_IOCATALOGUE_H */

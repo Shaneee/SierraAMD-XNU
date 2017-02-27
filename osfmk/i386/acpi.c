@@ -308,8 +308,14 @@ acpi_sleep_kernel(acpi_sleep_callback func, void *refcon)
 #endif
 
 	elapsed += mach_absolute_time() - start;
+	acpi_wake_abstime = mach_absolute_time();
 
-	rtc_decrementer_configure();
+	/* let the realtime clock reset */
+	rtc_sleep_wakeup(acpi_sleep_abstime);
+	acpi_wake_postrebase_abstime = mach_absolute_time();
+	assert(mach_absolute_time() >= acpi_sleep_abstime);
+
+/*	rtc_decrementer_configure(); */
 	kdebug_enable = save_kdebug_enable;
 
 	if (kdebug_enable == 0) {

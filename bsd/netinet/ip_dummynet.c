@@ -1932,9 +1932,9 @@ dn_ipfw_rule_delete_fs(struct dn_flow_set *fs, void *r)
 void
 dn_ipfw_rule_delete(void *r)
 {
-    struct dn_pipe *p ;
-    struct dn_flow_set *fs ;
-    struct dn_pkt_tag *pkt ;
+    struct dn_pipe *p = (struct dn_pipe *)0;
+    struct dn_flow_set *fs = (struct dn_flow_set *)0;
+    struct dn_pkt_tag *pkt = (struct dn_pkt_tag *)0;
     struct mbuf *m ;
     int i;
 

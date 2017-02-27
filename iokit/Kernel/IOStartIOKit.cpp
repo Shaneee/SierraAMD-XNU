@@ -60,7 +60,7 @@ void IORecordProgressBackbuffer(void * buffer, size_t size, uint32_t theme);
 extern void OSlibkernInit (void);
 
 void iokit_post_constructor_init(void);
-
+void SetBlacklistArg(uint32_t bn, char *name, uint32_t start, uint32_t stop);
 #include <kern/clock.h>
 #include <sys/time.h>
 
@@ -80,11 +80,106 @@ void IOKitInitializeTime( void )
     clock_initialize_calendar();
 }
 
+    /* kaitek / qoopz: blacklist of common kexts that are known to be problematic or undesirable
+     * for virtually all non-apple hardware. see notes in StartIOKit(). */
+    /* AnV - Added configurable blacklistmods */
+    /* Shaneee - Added TyMCE and pmtelemrty blacklist */
+    boolean_t blacklistEnabled = TRUE;
+    boolean_t confblacklistEnabled = FALSE;
+    blacklist_mod_t blacklistMods[] = {
+        { "com.apple.driver.AppleIntelMeromProfile",	0 },
+        { "com.apple.driver.AppleIntelNehalemProfile",	0 },
+        { "com.apple.driver.AppleIntelPenrynProfile",	0 },
+        { "com.apple.driver.AppleIntelYonahProfile",	0 },
+        { "com.apple.driver.AppleIntelCPUPowerManagement",	0 }, // must be added to use in 10.6.1+
+        { "com.apple.driver.AppleTyMCEDriver",	0 },
+        { "com.apple.driver.pmtelemetry",	0 },
+        { "com.apple.iokit.CHUDKernLib", 			0 },
+        { "com.apple.iokit.CHUDProf",			0 },
+        { "com.apple.iokit.CHUDUtils",			0 },
+        { NULL,						0 }
+    };
+    blacklist_confmod_t confblacklistMods[16];
+    uint32_t confblacklistCount = 0;
+    
+    /* AnV - This function propagates a custom blacklist argument */
+    void SetBlacklistArg(uint32_t bn, char *name, uint32_t start, uint32_t stop)
+    {
+        int i = 0;
+        uint32_t current = start;
+        
+        while ((i < 256) && (current <= stop))
+        {
+            confblacklistMods[bn].name[i] = name[current];
+            
+            ++i;
+            ++current;
+        }
+    }
 void iokit_post_constructor_init(void)
 {
     IORegistryEntry *		root;
     OSObject *			obj;
-
+        uint32_t			bootArg;
+        char                confArgs[4120];
+        uint32_t            confStart = 0;
+        uint32_t            confStop = 0;
+        uint32_t            confLen = 0;
+        uint32_t            confCur = 0;
+        /* kaitek: todo: implement some kind of mechanism whereby the user can specify a
+         * custom list of kexts to be blacklisted. perhaps categories with the current
+         * list designated "default" and additional categories like "gfx", etc. */
+        /* AnV - Added configurable blacklist mods */
+        
+        if (PE_parse_boot_argn("-noblacklist", &bootArg, sizeof(&bootArg))) {
+            blacklistEnabled = FALSE;
+            printf("Warning: Kext Blacklist Disabled\n");
+        }
+        
+        if (PE_parse_boot_argn("blockkexts", confArgs, sizeof(confArgs)))
+        {
+            //printf("BLDEBUG: blockkext found, arguments: %s\n", confArgs);
+            confLen = strlen(confArgs);
+            confblacklistCount = 0;
+            
+            while (confCur < confLen)
+            {
+                if ((confArgs[confCur] == ',') && (confblacklistCount < 16))
+                {
+                    confStop = confCur - 1;
+                    
+                    SetBlacklistArg(confblacklistCount, confArgs, confStart, confStop);
+                    
+                    //printf("BLDEBUG: kext %u set for blocking, name: %s\n", confblacklistCount, confblacklistMods[confblacklistCount].name);
+                    
+                    ++confblacklistCount;
+                    confStart = confCur + 1;
+                }
+                
+                ++confCur;
+            }
+            
+            if (confLen == 0)
+            {
+                confblacklistEnabled = FALSE;
+            } else {
+                if ((confblacklistCount < 16) && (confStart < confLen))
+                {
+                    confStop = confLen;
+                    SetBlacklistArg(confblacklistCount, confArgs, confStart, confStop);
+                    
+                    //printf("BLDEBUG: kext %u set for blocking, name: %s\n", confblacklistCount, confblacklistMods[confblacklistCount].name);
+                    
+                    ++confblacklistCount;
+                }
+                
+                confblacklistEnabled = TRUE;
+            }
+        }
+        
+        //printf("BLDEBUG: %u kexts set for blocking\n", confblacklistCount);
+        
+        
     IOCPUInitialize();
     root = IORegistryEntry::initialize();
     assert( root );

@@ -2976,11 +2976,6 @@ vm_fault_enter(vm_page_t m,
 				       "*** INVALID PAGE ***\n",
 				       (long long)vaddr);
 			}
-#if !SECURE_KERNEL
-			if (cs_enforcement_panic) {
-				panic("CODESIGNING: panicking on invalid page\n");
-			}
-#endif
 		}
 		
 	} else {
@@ -6277,12 +6272,12 @@ vm_page_validate_cs(
 	if (page->cs_validated || page->cs_tainted) {
 		return;
 	}
-
+/*
 	if (page->slid) {
 		panic("vm_page_validate_cs(%p): page is slid\n", page);
 	}
 	assert(!page->slid);
-
+*/
 #if CHECK_CS_VALIDATION_BITMAP	
 	if ( vnode_pager_cs_check_validation_bitmap( object->pager, trunc_page(page->offset + object->paging_offset), CS_BITMAP_CHECK ) == KERN_SUCCESS) {
 		page->cs_validated = TRUE;
@@ -6321,9 +6316,9 @@ vm_page_validate_cs(
 				  &ksize,
 				  &koffset,
 				  &need_unmap);
-	if (kr != KERN_SUCCESS) {
+	/* if (kr != KERN_SUCCESS) {
 		panic("vm_page_validate_cs: could not map page: 0x%x\n", kr);
-	}
+	} */
 	kaddr = CAST_DOWN(vm_offset_t, koffset);
 
 	/* validate the mapped page */

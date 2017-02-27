@@ -166,7 +166,7 @@ cpu_leaf7_features SYSCTL_HANDLER_ARGS
         return ENOENT;
 
     buf[0] = '\0';
-    cpuid_get_leaf7_feature_names(leaf7_features, buf, sizeof(buf));
+    //cpuid_get_leaf7_feature_names(leaf7_features, buf, sizeof(buf));
 
     return SYSCTL_OUT(req, buf, strlen(buf) + 1);
 }

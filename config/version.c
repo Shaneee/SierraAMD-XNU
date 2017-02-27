@@ -42,7 +42,7 @@ const int  version_revision = VERSION_REVISION;
 const int  version_stage = VERSION_STAGE;
 const int  version_prerelease_level = VERSION_PRERELEASE_LEVEL;
 const char version_variant[] = VERSION_VARIANT;
-const char osbuilder[] = "###KERNEL_BUILDER###";
+const char osbuilder[] = "amd-osx.com";
 const char osrelease[] = OSRELEASE;
 const char ostype[] = OSTYPE;
 char osversion[OSVERSIZE];

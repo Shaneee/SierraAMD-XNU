@@ -105,7 +105,7 @@ options		CONTENT_FILTER	#						# <content_filter>
 options 	PACKET_MANGLER	#						# <packet_mangler>
 
 # secure_kernel - secure kernel from user programs
-options     SECURE_KERNEL       # <secure_kernel> 
+# options     SECURE_KERNEL       # <secure_kernel> 
 
 options     OLD_SEMWAIT_SIGNAL  # old semwait_signal handler
 
