@@ -1129,7 +1129,7 @@ struct ifaddr {
 #define	IFD_DEBUG	0x4		/* has debugging info */
 #define	IFD_LINK	0x8		/* link address */
 #define	IFD_TRASHED	0x10		/* in trash list */
-#define	IFD_SKIP	0x20		/* skip this entry */
+#define	IFD_DETACHING	0x20		/* detach is in progress */
 #define	IFD_NOTREADY	0x40		/* embryonic; not yet ready */
 
 #define	IFA_LOCK_ASSERT_HELD(_ifa)					\
@@ -1365,6 +1365,9 @@ typedef enum {
 
 #define	IF_LLADDR(_ifp)	\
 	(LLADDR(SDL(((_ifp)->if_lladdr)->ifa_addr)))
+
+#define	IF_INDEX_IN_RANGE(_ind_) ((_ind_) > 0 && \
+	(unsigned int)(_ind_) <= (unsigned int)if_index)
 
 __private_extern__ void ifnet_lock_assert(struct ifnet *, ifnet_lock_assert_t);
 __private_extern__ void ifnet_lock_shared(struct ifnet *ifp);

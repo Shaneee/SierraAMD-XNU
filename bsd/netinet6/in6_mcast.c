@@ -2470,6 +2470,8 @@ in6p_leave_group(struct inpcb *inp, struct sockopt *sopt)
 			    ip6_sprintf(&gsa->sin6.sin6_addr)));
 			ifp = in6p_lookup_mcast_ifp(inp, &gsa->sin6);
 		} else {
+			if (!IF_INDEX_IN_RANGE(ifindex))
+				return (EADDRNOTAVAIL);
 			ifnet_head_lock_shared();
 			ifp = ifindex2ifnet[ifindex];
 			ifnet_head_done();
@@ -3209,10 +3211,6 @@ in6_multi_attach(struct in6_multi *in6m)
 
 	if (in6m->in6m_debug & IFD_ATTACHED) {
 		panic("%s: Attempt to attach an already attached in6m=%p",
-		    __func__, in6m);
-		/* NOTREACHED */
-	} else if (in6m->in6m_debug & IFD_TRASHED) {
-		panic("%s: Attempt to reattach a detached in6m=%p",
 		    __func__, in6m);
 		/* NOTREACHED */
 	}

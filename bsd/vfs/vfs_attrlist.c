@@ -356,6 +356,8 @@ static struct getvolattrlist_attrtab getvolattrlist_vol_tab[] = {
 	{ATTR_VOL_ENCODINGSUSED,	0,						sizeof(uint64_t)},
 	{ATTR_VOL_CAPABILITIES,		VFSATTR_BIT(f_capabilities),			sizeof(vol_capabilities_attr_t)},
 	{ATTR_VOL_UUID,			VFSATTR_BIT(f_uuid),				sizeof(uuid_t)},
+	{ATTR_VOL_QUOTA_SIZE,		VFSATTR_BIT(f_quota),				sizeof(off_t)},
+	{ATTR_VOL_RESERVED_SIZE,	VFSATTR_BIT(f_reserved),			sizeof(off_t)},
 	{ATTR_VOL_ATTRIBUTES,		VFSATTR_BIT(f_attributes),			sizeof(vol_attributes_attr_t)},
 	{ATTR_VOL_INFO, 0, 0},
 	{0, 0, 0}
@@ -363,7 +365,7 @@ static struct getvolattrlist_attrtab getvolattrlist_vol_tab[] = {
 
 static int
 getvolattrlist_parsetab(struct getvolattrlist_attrtab *tab, attrgroup_t attrs, struct vfs_attr *vsp,
-    ssize_t *sizep, int is_64bit)
+		ssize_t *sizep, int is_64bit, unsigned int maxiter)
 {
 	attrgroup_t	recognised;
 
@@ -383,7 +385,7 @@ getvolattrlist_parsetab(struct getvolattrlist_attrtab *tab, attrgroup_t attrs, s
 				*sizep += tab->size;
 			}
 		}
-	} while ((++tab)->attr != 0);
+	} while (((++tab)->attr != 0) && (--maxiter > 0));
 	
 	/* check to make sure that we recognised all of the passed-in attributes */
 	if (attrs & ~recognised)
@@ -399,6 +401,8 @@ static int
 getvolattrlist_setupvfsattr(struct attrlist *alp, struct vfs_attr *vsp, ssize_t *sizep, int is_64bit)
 {
 	int	error;
+	if (!alp)
+		return EINVAL;
 
 	/*
 	 * Parse the above tables.
@@ -410,13 +414,14 @@ getvolattrlist_setupvfsattr(struct attrlist *alp, struct vfs_attr *vsp, ssize_t 
 			return (EINVAL);
 		}
 		if ((error = getvolattrlist_parsetab(getvolattrlist_common_tab,
-		                                    alp->commonattr, vsp, sizep,
-		                                    is_64bit)) != 0) {
+				alp->commonattr, vsp, sizep,
+				is_64bit,
+				sizeof(getvolattrlist_common_tab)/sizeof(getvolattrlist_common_tab[0]))) != 0) {
 			return(error);
 		}
 	}
 	if (alp->volattr &&
-	    (error = getvolattrlist_parsetab(getvolattrlist_vol_tab, alp->volattr, vsp, sizep, is_64bit)) != 0)
+	    (error = getvolattrlist_parsetab(getvolattrlist_vol_tab, alp->volattr, vsp, sizep, is_64bit, sizeof(getvolattrlist_vol_tab)/sizeof(getvolattrlist_vol_tab[0]))) != 0)
 		return(error);
 
 	return(0);
@@ -509,6 +514,9 @@ static struct getattrlist_attrtab getattrlist_dir_tab[] = {
 	{ATTR_DIR_LINKCOUNT,	VATTR_BIT(va_dirlinkcount),	sizeof(uint32_t),		KAUTH_VNODE_READ_ATTRIBUTES},
 	{ATTR_DIR_ENTRYCOUNT,	VATTR_BIT(va_nchildren),	sizeof(uint32_t),		KAUTH_VNODE_READ_ATTRIBUTES},
 	{ATTR_DIR_MOUNTSTATUS,	0,				sizeof(uint32_t),		KAUTH_VNODE_READ_ATTRIBUTES},
+	{ATTR_DIR_ALLOCSIZE,	VATTR_BIT(va_total_alloc) | VATTR_BIT(va_total_size), sizeof(off_t), KAUTH_VNODE_READ_ATTRIBUTES},
+	{ATTR_DIR_IOBLOCKSIZE,	VATTR_BIT(va_iosize),		sizeof(uint32_t),		KAUTH_VNODE_READ_ATTRIBUTES},
+	{ATTR_DIR_DATALENGTH,	VATTR_BIT(va_total_size) | VATTR_BIT(va_data_size), sizeof(off_t), KAUTH_VNODE_READ_ATTRIBUTES},
 	{0, 0, 0, 0}
 };
 static struct getattrlist_attrtab getattrlist_file_tab[] = {
@@ -522,7 +530,15 @@ static struct getattrlist_attrtab getattrlist_file_tab[] = {
 	{ATTR_FILE_RSRCLENGTH,	0,				sizeof(off_t),			KAUTH_VNODE_READ_ATTRIBUTES},
 	{ATTR_FILE_RSRCALLOCSIZE, 0,				sizeof(off_t),			KAUTH_VNODE_READ_ATTRIBUTES},
 	{0, 0, 0, 0}
-};	
+};
+
+//for forkattr bits repurposed as new common attributes
+static struct getattrlist_attrtab getattrlist_common_extended_tab[] = {
+	{ATTR_CMNEXT_RELPATH,		0,							sizeof(struct attrreference),	KAUTH_VNODE_READ_ATTRIBUTES},
+	{ATTR_CMNEXT_PRIVATESIZE,	VATTR_BIT(va_private_size),	sizeof(off_t),					KAUTH_VNODE_READ_ATTRIBUTES},
+	{ATTR_CMNEXT_LINKID,		VATTR_BIT(va_fileid) | VATTR_BIT(va_linkid),		sizeof(uint64_t),	KAUTH_VNODE_READ_ATTRIBUTES},
+	{0, 0, 0, 0}
+};
 
 /*
  * This table is for attributes which are only set from the getattrlistbulk(2)
@@ -549,13 +565,19 @@ static struct getattrlist_attrtab getattrlistbulk_file_tab[] = {
 	{0, 0, 0, 0}
 };
 
+static struct getattrlist_attrtab getattrlistbulk_common_extended_tab[] = {
+	/* getattrlist_parsetab() expects > 1 entries */
+	{0, 0, 0, 0},
+	{0, 0, 0, 0}
+};
+
 /*
  * The following are attributes that VFS can derive.
  *
  * A majority of them are the same attributes that are required for stat(2) and statfs(2).
  */
 #define VFS_DFLT_ATTR_VOL	(ATTR_VOL_FSTYPE | ATTR_VOL_SIGNATURE |  \
-				 ATTR_VOL_SIZE | ATTR_VOL_SPACEFREE |  \
+				 ATTR_VOL_SIZE | ATTR_VOL_SPACEFREE |  ATTR_VOL_QUOTA_SIZE | ATTR_VOL_RESERVED_SIZE | \
 				 ATTR_VOL_SPACEAVAIL | ATTR_VOL_MINALLOCATION |  \
 				 ATTR_VOL_ALLOCATIONCLUMP |  ATTR_VOL_IOBLOCKSIZE |  \
 				 ATTR_VOL_MOUNTPOINT | ATTR_VOL_MOUNTFLAGS |  \
@@ -575,8 +597,7 @@ static struct getattrlist_attrtab getattrlistbulk_file_tab[] = {
 				 ATTR_CMN_DOCUMENT_ID | ATTR_CMN_GEN_COUNT | \
 				 ATTR_CMN_DATA_PROTECT_FLAGS)
 
-#define VFS_DFLT_ATT_CMN_EXT	(ATTR_CMN_EXT_GEN_COUNT | ATTR_CMN_EXT_DOCUMENT_ID |\
-				 ATTR_CMN_EXT_DATA_PROTECT_FLAGS)
+#define VFS_DFLT_ATTR_CMN_EXT	(ATTR_CMNEXT_PRIVATESIZE | ATTR_CMNEXT_LINKID)
 
 #define VFS_DFLT_ATTR_DIR	(ATTR_DIR_LINKCOUNT | ATTR_DIR_MOUNTSTATUS)
 
@@ -589,11 +610,13 @@ static struct getattrlist_attrtab getattrlistbulk_file_tab[] = {
 static int
 getattrlist_parsetab(struct getattrlist_attrtab *tab, attrgroup_t attrs,
     struct vnode_attr *vap, ssize_t *sizep, kauth_action_t *actionp,
-    int is_64bit)
+    int is_64bit, unsigned int maxiter)
 {
 	attrgroup_t	recognised;
-
 	recognised = 0;
+	if (!tab)
+		return EINVAL;
+
 	do {
 		/* is this attribute set? */
 		if (tab->attr & attrs) {
@@ -618,7 +641,7 @@ getattrlist_parsetab(struct getattrlist_attrtab *tab, attrgroup_t attrs,
 			if (attrs == recognised)
 				break;  /* all done, get out */
 		}
-	} while ((++tab)->attr != 0);
+	} while (((++tab)->attr != 0) && (--maxiter > 0));
 	
 	/* check to make sure that we recognised all of the passed-in attributes */
 	if (attrs & ~recognised)
@@ -631,7 +654,7 @@ getattrlist_parsetab(struct getattrlist_attrtab *tab, attrgroup_t attrs,
  * the data from a filesystem.
  */
 static int
-getattrlist_setupvattr(struct attrlist *alp, struct vnode_attr *vap, ssize_t *sizep, kauth_action_t *actionp, int is_64bit, int isdir)
+getattrlist_setupvattr(struct attrlist *alp, struct vnode_attr *vap, ssize_t *sizep, kauth_action_t *actionp, int is_64bit, int isdir, int use_fork)
 {
 	int	error;
 
@@ -641,13 +664,16 @@ getattrlist_setupvattr(struct attrlist *alp, struct vnode_attr *vap, ssize_t *si
 	*sizep = sizeof(uint32_t);	/* length count */
 	*actionp = 0;
 	if (alp->commonattr &&
-	    (error = getattrlist_parsetab(getattrlist_common_tab, alp->commonattr, vap, sizep, actionp, is_64bit)) != 0)
+	    (error = getattrlist_parsetab(getattrlist_common_tab, alp->commonattr, vap, sizep, actionp, is_64bit, sizeof(getattrlist_common_tab)/sizeof(getattrlist_common_tab[0]))) != 0)
 		return(error);
 	if (isdir && alp->dirattr &&
-	    (error = getattrlist_parsetab(getattrlist_dir_tab, alp->dirattr, vap, sizep, actionp, is_64bit)) != 0)
+	    (error = getattrlist_parsetab(getattrlist_dir_tab, alp->dirattr, vap, sizep, actionp, is_64bit, sizeof(getattrlist_dir_tab)/sizeof(getattrlist_dir_tab[0]))) != 0)
 		return(error);
 	if (!isdir && alp->fileattr &&
-	    (error = getattrlist_parsetab(getattrlist_file_tab, alp->fileattr, vap, sizep, actionp, is_64bit)) != 0)
+	    (error = getattrlist_parsetab(getattrlist_file_tab, alp->fileattr, vap, sizep, actionp, is_64bit, sizeof(getattrlist_file_tab)/sizeof(getattrlist_file_tab[0]))) != 0)
+		return(error);
+	if (use_fork && alp->forkattr &&
+	    (error = getattrlist_parsetab(getattrlist_common_extended_tab, alp->forkattr, vap, sizep, actionp, is_64bit, sizeof(getattrlist_common_extended_tab)/sizeof(getattrlist_common_extended_tab[0]))) != 0)
 		return(error);
 
 	return(0);
@@ -659,7 +685,7 @@ getattrlist_setupvattr(struct attrlist *alp, struct vnode_attr *vap, ssize_t *si
  */
 static int
 getattrlist_setupvattr_all(struct attrlist *alp, struct vnode_attr *vap,
-    enum vtype obj_type, ssize_t *fixedsize, int is_64bit)
+    enum vtype obj_type, ssize_t *fixedsize, int is_64bit, int use_fork)
 {
 	int	error = 0;
 
@@ -671,12 +697,14 @@ getattrlist_setupvattr_all(struct attrlist *alp, struct vnode_attr *vap,
 	}
 	if (alp->commonattr) {
 		error = getattrlist_parsetab(getattrlist_common_tab,
-		    alp->commonattr, vap, fixedsize, NULL, is_64bit);
+			alp->commonattr, vap, fixedsize, NULL, is_64bit,
+			sizeof(getattrlist_common_tab)/sizeof(getattrlist_common_tab[0]));
 
 		if (!error) {
 			/* Ignore any errrors from the bulk table */
 			(void)getattrlist_parsetab(getattrlistbulk_common_tab,
-			    alp->commonattr, vap, fixedsize, NULL, is_64bit);
+				alp->commonattr, vap, fixedsize, NULL, is_64bit,
+				sizeof(getattrlistbulk_common_tab)/sizeof(getattrlistbulk_common_tab[0]));
 			/*
 			 * turn off va_fsid since we will be using only
 			 * va_fsid64 for ATTR_CMN_FSID.
@@ -687,17 +715,33 @@ getattrlist_setupvattr_all(struct attrlist *alp, struct vnode_attr *vap,
 
 	if (!error && (obj_type == VNON || obj_type == VDIR) && alp->dirattr) {
 		error = getattrlist_parsetab(getattrlist_dir_tab, alp->dirattr,
-	            vap, fixedsize, NULL, is_64bit);
+				vap, fixedsize, NULL, is_64bit,
+				sizeof(getattrlist_dir_tab)/sizeof(getattrlist_dir_tab[0]));
 	}
 
 	if (!error && (obj_type != VDIR) && alp->fileattr) {
 		error = getattrlist_parsetab(getattrlist_file_tab,
-		    alp->fileattr, vap, fixedsize, NULL, is_64bit);
+			alp->fileattr, vap, fixedsize, NULL, is_64bit,
+			sizeof(getattrlist_file_tab)/sizeof(getattrlist_file_tab[0]));
 
 		if (!error) {
 			/*Ignore any errors from the bulk table */
 			(void)getattrlist_parsetab(getattrlistbulk_file_tab,
-			    alp->fileattr, vap, fixedsize, NULL, is_64bit);
+				alp->fileattr, vap, fixedsize, NULL, is_64bit,
+				sizeof(getattrlistbulk_file_tab)/sizeof(getattrlistbulk_file_tab[0]));
+		}
+	}
+
+	/* fork attributes are like extended common attributes if enabled*/
+	if (!error && use_fork && alp->forkattr) {
+		error = getattrlist_parsetab(getattrlist_common_extended_tab,
+			alp->forkattr, vap, fixedsize, NULL, is_64bit,
+			sizeof(getattrlist_common_extended_tab)/sizeof(getattrlist_common_extended_tab[0]));
+
+		if (!error) {
+			(void)getattrlist_parsetab(getattrlistbulk_common_extended_tab,
+				alp->forkattr, vap, fixedsize, NULL, is_64bit,
+				sizeof(getattrlistbulk_common_extended_tab)/sizeof(getattrlistbulk_common_extended_tab[0]));
 		}
 	}
 
@@ -708,8 +752,10 @@ int
 vfs_setup_vattr_from_attrlist(struct attrlist *alp, struct vnode_attr *vap,
     enum vtype obj_vtype, ssize_t *attrs_fixed_sizep, vfs_context_t ctx)
 {
+	// the caller passes us no options, we assume the caller wants the new fork
+	// attr behavior, hence the hardcoded 1
 	return (getattrlist_setupvattr_all(alp, vap, obj_vtype,
-	    attrs_fixed_sizep, IS_64BIT_PROCESS(vfs_context_proc(ctx))));
+	    attrs_fixed_sizep, IS_64BIT_PROCESS(vfs_context_proc(ctx)), 1));
 }
 
 
@@ -721,7 +767,7 @@ vfs_setup_vattr_from_attrlist(struct attrlist *alp, struct vnode_attr *vap,
  * missing attributes from the file system
  */
 static void
-getattrlist_fixupattrs(attribute_set_t *asp, struct vnode_attr *vap)
+getattrlist_fixupattrs(attribute_set_t *asp, struct vnode_attr *vap, int use_fork)
 {
 	struct getattrlist_attrtab *tab;
 
@@ -772,6 +818,16 @@ getattrlist_fixupattrs(attribute_set_t *asp, struct vnode_attr *vap)
 			    (tab->bits & vap->va_active) &&
 			    (vap->va_supported & tab->bits) == 0) {
 				asp->fileattr &= ~tab->attr;
+			}
+		} while ((++tab)->attr != 0);
+	}
+	if (use_fork && asp->forkattr) {
+		tab = getattrlist_common_extended_tab;
+		do {
+			if ((tab->attr & asp->forkattr) &&
+			    (tab->bits & vap->va_active) &&
+			    (vap->va_supported & tab->bits) == 0) {
+				asp->forkattr &= ~tab->attr;
 			}
 		} while ((++tab)->attr != 0);
 	}
@@ -951,7 +1007,7 @@ getvolattrlist(vfs_context_t ctx, vnode_t vp, struct attrlist *alp,
 				attrp->validattr.volattr = VFS_DFLT_ATTR_VOL;
 				attrp->validattr.dirattr = VFS_DFLT_ATTR_DIR;
 				attrp->validattr.fileattr = VFS_DFLT_ATTR_FILE;
-				attrp->validattr.forkattr = 0;
+				attrp->validattr.forkattr = VFS_DFLT_ATTR_CMN_EXT;
 		
 				attrp->nativeattr.commonattr =  0;
 				attrp->nativeattr.volattr = 0;
@@ -1344,6 +1400,14 @@ getvolattrlist(vfs_context_t ctx, vnode_t vp, struct attrlist *alp,
 	if (alp->volattr & ATTR_VOL_UUID) {
 		ATTR_PACK(&ab, vs.f_uuid);
 		ab.actual.volattr |= ATTR_VOL_UUID;
+	}
+	if (alp->volattr & ATTR_VOL_QUOTA_SIZE) {
+		ATTR_PACK_CAST(&ab, off_t, vs.f_bsize * vs.f_quota);
+		ab.actual.volattr |= ATTR_VOL_QUOTA_SIZE;
+	}
+	if (alp->volattr & ATTR_VOL_RESERVED_SIZE) {
+		ATTR_PACK_CAST(&ab, off_t, vs.f_bsize * vs.f_reserved);
+		ab.actual.volattr |= ATTR_VOL_RESERVED_SIZE;
 	}
 	if (alp->volattr & ATTR_VOL_ATTRIBUTES) {
 		/* fix up volume attribute information */
@@ -1797,7 +1861,7 @@ out:
 
 static errno_t
 attr_pack_dir(struct vnode *vp, struct attrlist *alp, struct _attrlist_buf *abp,
-    struct vnode_attr *vap)
+    struct vnode_attr *vap, int return_valid, int pack_invalid)
 {
 	if (alp->dirattr & ATTR_DIR_LINKCOUNT) {  /* full count of entries */
 		ATTR_PACK4((*abp), (uint32_t)vap->va_dirlinkcount);
@@ -1838,6 +1902,43 @@ attr_pack_dir(struct vnode *vp, struct attrlist *alp, struct _attrlist_buf *abp,
 
 		ATTR_PACK4((*abp), mntstat);
 		abp->actual.dirattr |= ATTR_DIR_MOUNTSTATUS;
+	}
+	if (alp->dirattr & ATTR_DIR_ALLOCSIZE) {
+		if (VATTR_IS_SUPPORTED(vap, va_data_alloc)) {
+			ATTR_PACK8((*abp), vap->va_data_alloc);
+			abp->actual.dirattr |= ATTR_DIR_ALLOCSIZE;
+		} else if (VATTR_IS_SUPPORTED(vap, va_total_alloc)) {
+			ATTR_PACK8((*abp), vap->va_total_alloc);
+			abp->actual.dirattr |= ATTR_DIR_ALLOCSIZE;
+		} else if (!return_valid || pack_invalid) {
+			uint64_t zero_val = 0;
+			ATTR_PACK8((*abp), zero_val);
+		}
+	}
+	if (alp->dirattr & ATTR_DIR_IOBLOCKSIZE) {
+		if (VATTR_IS_SUPPORTED(vap, va_iosize)) {
+			ATTR_PACK4((*abp), vap->va_iosize);
+			abp->actual.dirattr |= ATTR_DIR_IOBLOCKSIZE;
+		} else if (!return_valid || pack_invalid) {
+			ATTR_PACK4((*abp), 0);
+		}
+	}
+	/*
+	 * If the filesystem does not support datalength
+	 * or dataallocsize, then we infer that totalsize and
+	 * totalalloc are substitutes.
+	 */
+	if (alp->dirattr & ATTR_DIR_DATALENGTH) {
+		if (VATTR_IS_SUPPORTED(vap, va_data_size)) {
+			ATTR_PACK8((*abp), vap->va_data_size);
+			abp->actual.dirattr |= ATTR_DIR_DATALENGTH;
+		} else if (VATTR_IS_SUPPORTED(vap, va_total_size)) {
+			ATTR_PACK8((*abp), vap->va_total_size);
+			abp->actual.dirattr |= ATTR_DIR_DATALENGTH;
+		} else if (!return_valid || pack_invalid) {
+			uint64_t zero_val = 0;
+			ATTR_PACK8((*abp), zero_val);
+		}
 	}
 
 	return 0;
@@ -1919,7 +2020,7 @@ attr_pack_file(vfs_context_t ctx, struct vnode *vp,  struct attrlist *alp,
 
 			if (VATTR_IS_SUPPORTED(vap, va_data_size)) {
 				totalsize += vap->va_data_size;
-			} else {
+			} else if (VATTR_IS_SUPPORTED(vap, va_total_size)) {
 				totalsize += vap->va_total_size;
 			}
 
@@ -1944,7 +2045,7 @@ attr_pack_file(vfs_context_t ctx, struct vnode *vp,  struct attrlist *alp,
 			 */
 			if (VATTR_IS_SUPPORTED(vap, va_data_alloc)) {
 				totalalloc += vap->va_data_alloc;
-			} else {
+			} else if (VATTR_IS_SUPPORTED(vap, va_total_alloc)) {
 				totalalloc += vap->va_total_alloc;
 			}
 
@@ -1960,8 +2061,12 @@ attr_pack_file(vfs_context_t ctx, struct vnode *vp,  struct attrlist *alp,
 		}
 	}
 	if (alp->fileattr & ATTR_FILE_IOBLOCKSIZE) {
-		ATTR_PACK4((*abp), vap->va_iosize);
-		abp->actual.fileattr |= ATTR_FILE_IOBLOCKSIZE;
+		if (VATTR_IS_SUPPORTED(vap, va_iosize)) {
+			ATTR_PACK4((*abp), vap->va_iosize);
+			abp->actual.fileattr |= ATTR_FILE_IOBLOCKSIZE;
+		} else if (!return_valid || pack_invalid) {
+			ATTR_PACK4((*abp), 0);
+		}
 	}
 	if (alp->fileattr & ATTR_FILE_CLUMPSIZE) {
 		if (!return_valid || pack_invalid) {
@@ -2000,18 +2105,26 @@ attr_pack_file(vfs_context_t ctx, struct vnode *vp,  struct attrlist *alp,
 	if (alp->fileattr & ATTR_FILE_DATALENGTH) {
 		if (VATTR_IS_SUPPORTED(vap, va_data_size)) {
 			ATTR_PACK8((*abp), vap->va_data_size);
-		} else {
+			abp->actual.fileattr |= ATTR_FILE_DATALENGTH;
+		} else if (VATTR_IS_SUPPORTED(vap, va_total_size)){
 			ATTR_PACK8((*abp), vap->va_total_size);
+			abp->actual.fileattr |= ATTR_FILE_DATALENGTH;
+		} else if (!return_valid || pack_invalid) {
+			uint64_t zero_val = 0;
+			ATTR_PACK8((*abp), zero_val);
 		}
-		abp->actual.fileattr |= ATTR_FILE_DATALENGTH;
 	}
 	if (alp->fileattr & ATTR_FILE_DATAALLOCSIZE) {
 		if (VATTR_IS_SUPPORTED(vap, va_data_alloc)) {
 			ATTR_PACK8((*abp), vap->va_data_alloc);
-		} else {
+			abp->actual.fileattr |= ATTR_FILE_DATAALLOCSIZE;
+		} else if (VATTR_IS_SUPPORTED(vap, va_total_alloc)){
 			ATTR_PACK8((*abp), vap->va_total_alloc);
+			abp->actual.fileattr |= ATTR_FILE_DATAALLOCSIZE;
+		} else if (!return_valid || pack_invalid) {
+			uint64_t zero_val = 0;
+			ATTR_PACK8((*abp), zero_val);
 		}
-		abp->actual.fileattr |= ATTR_FILE_DATAALLOCSIZE;
 	}
 	/* already got the resource fork size/allocation above */
 	if (alp->fileattr & ATTR_FILE_RSRCLENGTH) {
@@ -2042,6 +2155,48 @@ attr_pack_file(vfs_context_t ctx, struct vnode *vp,  struct attrlist *alp,
 	}
 out:
 	return (error);
+}
+
+/*
+ * Pack FORKATTR attributes into a user buffer.
+ * alp is a pointer to the bitmap of attributes required.
+ * abp is the state of the attribute filling operation.
+ * The attribute data (along with some other fields that are required
+ * are in ad.
+ */
+static errno_t
+attr_pack_common_extended(struct vnode *vp, struct attrlist *alp,
+		struct _attrlist_buf *abp, const char *relpathptr, ssize_t relpathlen,
+		struct vnode_attr *vap, int return_valid, int pack_invalid)
+{
+	if (vp && (alp->forkattr & ATTR_CMNEXT_RELPATH)) {
+		attrlist_pack_string(abp, relpathptr, relpathlen);
+		abp->actual.forkattr |= ATTR_CMNEXT_RELPATH;
+	}
+
+	if (alp->forkattr & ATTR_CMNEXT_PRIVATESIZE) {
+		if (VATTR_IS_SUPPORTED(vap, va_private_size)) {
+			ATTR_PACK8((*abp), vap->va_private_size);
+			abp->actual.forkattr |= ATTR_CMNEXT_PRIVATESIZE;
+		} else if (!return_valid || pack_invalid) {
+			uint64_t zero_val = 0;
+			ATTR_PACK8((*abp), zero_val);
+		}
+	}
+
+	if (alp->forkattr & ATTR_CMNEXT_LINKID) {
+		uint64_t linkid;
+
+		if (VATTR_IS_SUPPORTED(vap, va_linkid))
+			linkid = vap->va_linkid;
+		else
+			linkid = vap->va_fileid;
+
+		ATTR_PACK8((*abp), linkid);
+		abp->actual.forkattr |= ATTR_CMNEXT_LINKID;
+	}
+
+	return 0;
 }
 
 static void
@@ -2121,7 +2276,8 @@ vattr_get_alt_data(vnode_t vp, struct attrlist *alp, struct vnode_attr *vap,
 static errno_t
 calc_varsize(vnode_t vp, struct attrlist *alp, struct vnode_attr *vap,
    ssize_t *varsizep, char *fullpathptr, ssize_t *fullpathlenp,
-   const char **vnamep, const char **cnpp, ssize_t *cnlp)  
+   char *relpathptr, ssize_t *relpathlenp, const char **vnamep,
+   const char **cnpp, ssize_t *cnlp)
 {
 	int error = 0;
 
@@ -2189,6 +2345,25 @@ calc_varsize(vnode_t vp, struct attrlist *alp, struct vnode_attr *vap,
 	}
 
 	/*
+	 * Compute this vnode's volume relative path.
+	 */
+	if (vp && (alp->forkattr & ATTR_CMNEXT_RELPATH)) {
+		int len;
+		int err;
+
+		/* call build_path making sure NOT to use the cache-only behavior */
+		err = build_path(vp, relpathptr, MAXPATHLEN, &len, BUILDPATH_VOLUME_RELATIVE, vfs_context_current());
+		if (err) {
+			error = err;
+			goto out;
+		}
+
+		//`len' includes trailing null
+		*relpathlenp = len - 1;
+		*varsizep += roundup(len, 4);
+	}
+
+	/*
 	 * We have a kauth_acl_t but we will be returning a kauth_filesec_t.
 	 *
 	 * XXX This needs to change at some point; since the blob is opaque in
@@ -2228,11 +2403,14 @@ vfs_attr_pack_internal(vnode_t vp, uio_t auio, struct attrlist *alp,
 	ssize_t cnl;
 	char *fullpathptr;
 	ssize_t	fullpathlen;
+	char *relpathptr;
+	ssize_t relpathlen;
 	int error;
 	int proc_is64;
 	int return_valid;
 	int pack_invalid;
 	int alloc_local_buf;
+	const int use_fork = options & FSOPT_ATTR_CMN_EXTENDED;
 
 	proc_is64 = proc_is64bit(vfs_context_proc(ctx));
 	ab.base = NULL;
@@ -2240,6 +2418,8 @@ vfs_attr_pack_internal(vnode_t vp, uio_t auio, struct attrlist *alp,
 	cnl = 0;
 	fullpathptr = NULL;
 	fullpathlen = 0;
+	relpathptr = NULL;
+	relpathlen = 0;
 	error = 0;
 	alloc_local_buf = 0;
 
@@ -2266,14 +2446,14 @@ vfs_attr_pack_internal(vnode_t vp, uio_t auio, struct attrlist *alp,
 		if (!VATTR_ALL_SUPPORTED(vap)) {
 			if (return_valid && pack_invalid) {
 				/* Fix up valid mask for post processing */
-				getattrlist_fixupattrs(&ab.valid, vap);
+				getattrlist_fixupattrs(&ab.valid, vap, use_fork);
 					
 				/* Force packing of everything asked for */
 				vap->va_supported = vap->va_active;
 			} else if (return_valid) {
 				/* Adjust the requested attributes */
 				getattrlist_fixupattrs(
-				    (attribute_set_t *)&(alp->commonattr), vap);
+				    (attribute_set_t *)&(alp->commonattr), vap, use_fork);
 			} else {
 				error = EINVAL;
 			}
@@ -2283,6 +2463,7 @@ vfs_attr_pack_internal(vnode_t vp, uio_t auio, struct attrlist *alp,
 			goto out;
 	}
 
+	//if a path is requested, allocate a temporary buffer to build it
 	if (vp && (alp->commonattr & (ATTR_CMN_FULLPATH))) {
 		fullpathptr = (char*) kalloc(MAXPATHLEN);
 		if (fullpathptr == NULL) {
@@ -2293,11 +2474,22 @@ vfs_attr_pack_internal(vnode_t vp, uio_t auio, struct attrlist *alp,
 		bzero(fullpathptr, MAXPATHLEN);
 	}
 
+	// only interpret fork attributes if they're used as new common attributes
+	if (vp && use_fork && (alp->forkattr & (ATTR_CMNEXT_RELPATH))) {
+		relpathptr = (char*) kalloc(MAXPATHLEN);
+		if (relpathptr == NULL) {
+			error = ENOMEM;
+			VFS_DEBUG(ctx,vp, "ATTRLIST - ERROR: cannot allocate relpath buffer");
+			goto out;
+		}
+		bzero(relpathptr, MAXPATHLEN);
+	}
+
 	/*
 	 * Compute variable-space requirements.
 	 */
 	error = calc_varsize(vp, alp, vap, &varsize, fullpathptr, &fullpathlen,
-	    &vname, &cnp, &cnl);
+			relpathptr, &relpathlen, &vname, &cnp, &cnl);
 	if (error)
 		goto out;
 
@@ -2415,17 +2607,23 @@ vfs_attr_pack_internal(vnode_t vp, uio_t auio, struct attrlist *alp,
 
 	/* common attributes ************************************************/
 	error = attr_pack_common(ctx, vp, alp, &ab, vap, proc_is64, cnp, cnl,
-	    fullpathptr, fullpathlen, return_valid, pack_invalid, vtype, is_bulk); 
+	    fullpathptr, fullpathlen, return_valid, pack_invalid, vtype, is_bulk);
 
 	/* directory attributes *********************************************/
 	if (!error && alp->dirattr && (vtype == VDIR)) {
-		error = attr_pack_dir(vp, alp, &ab, vap);
+		error = attr_pack_dir(vp, alp, &ab, vap, return_valid, pack_invalid);
 	}
 
 	/* file attributes **************************************************/
 	if (!error && alp->fileattr && (vtype != VDIR)) {
 		error = attr_pack_file(ctx, vp, alp, &ab, vap, return_valid,
 		    pack_invalid, is_bulk);
+	}
+
+	/* common extended attributes *****************************************/
+	if (!error && use_fork) {
+		error = attr_pack_common_extended(vp, alp, &ab, relpathptr, relpathlen,
+		    vap, return_valid, pack_invalid);
 	}
 
 	if (error)
@@ -2487,6 +2685,8 @@ out:
 		vnode_putname(vname);
 	if (fullpathptr)
 		kfree(fullpathptr, MAXPATHLEN);
+	if (relpathptr)
+		kfree(relpathptr, MAXPATHLEN);
 	if (ab.base != NULL && alloc_local_buf)
 		FREE(ab.base, M_TEMP);
 	return (error);
@@ -2512,7 +2712,7 @@ vfs_attr_pack(vnode_t vp, uio_t uio, struct attrlist *alp, uint64_t options,
 	vap->va_active = 0;
 
 	error = getattrlist_setupvattr_all(alp, vap, v_type, &fixedsize,
-	    proc_is64bit(vfs_context_proc(ctx)));
+	    proc_is64bit(vfs_context_proc(ctx)), options & FSOPT_ATTR_CMN_EXTENDED);
 
 	if (error) {
 		VFS_DEBUG(ctx, vp,
@@ -2556,6 +2756,8 @@ getattrlist_internal(vfs_context_t ctx, vnode_t vp, struct attrlist  *alp,
 	int		vtype = 0;
 	uio_t		auio;
 	char uio_buf[ UIO_SIZEOF(1)];
+	// must be true for fork attributes to be used as new common attributes
+	const int use_fork = (options & FSOPT_ATTR_CMN_EXTENDED) != 0;
 
 	proc_is64 = proc_is64bit(vfs_context_proc(ctx));
 
@@ -2588,13 +2790,15 @@ getattrlist_internal(vfs_context_t ctx, vnode_t vp, struct attrlist  *alp,
 #endif /* MAC */
 
 	/*
-	 * It is legal to request volume or file attributes,
-	 * but not both.
+	 * It is legal to request volume or file attributes, but not both.
+	 *
+	 * 26903449 fork attributes can also be requested, but only if they're
+	 * interpreted as new, common attributes
 	 */
 	if (alp->volattr) {
-		if (alp->fileattr || alp->dirattr || alp->forkattr) {
+		if (alp->fileattr || alp->dirattr || (alp->forkattr && !use_fork)) {
 			error = EINVAL;
-			VFS_DEBUG(ctx, vp, "ATTRLIST - ERROR: mixed volume/file/directory/fork attributes");
+			VFS_DEBUG(ctx, vp, "ATTRLIST - ERROR: mixed volume/file/directory attributes");
 			goto out;
 		}
 		/* handle volume attribute request */
@@ -2614,12 +2818,24 @@ getattrlist_internal(vfs_context_t ctx, vnode_t vp, struct attrlist  *alp,
 		goto out;
 	}
 
+	/* common extended attributes require FSOPT_ATTR_CMN_EXTENDED option */
+	if (!(use_fork) && (alp->forkattr & ATTR_CMNEXT_VALIDMASK)) {
+		error = EINVAL;
+		goto out;
+	}
+
+	/* FSOPT_ATTR_CMN_EXTENDED requires forkattrs are not referenced */
+	if ((options & FSOPT_ATTR_CMN_EXTENDED) && (alp->forkattr & (ATTR_FORK_VALIDMASK))) {
+		error = EINVAL;
+		goto out;
+	}
+
 	/* Check for special packing semantics */
 	return_valid = (alp->commonattr & ATTR_CMN_RETURNED_ATTRS) ? 1 : 0;
 	pack_invalid = (options & FSOPT_PACK_INVAL_ATTRS) ? 1 : 0;
 	if (pack_invalid) {
 		/* FSOPT_PACK_INVAL_ATTRS requires ATTR_CMN_RETURNED_ATTRS */
-		if (!return_valid || alp->forkattr) {
+		if (!return_valid || (alp->forkattr && !use_fork)) {
 			error = EINVAL;
 			goto out;
 		}
@@ -2635,7 +2851,7 @@ getattrlist_internal(vfs_context_t ctx, vnode_t vp, struct attrlist  *alp,
 	/*
 	 * Set up the vnode_attr structure and authorise.
 	 */
-	if ((error = getattrlist_setupvattr(alp, &va, &fixedsize, &action, proc_is64, (vtype == VDIR))) != 0) {
+	if ((error = getattrlist_setupvattr(alp, &va, &fixedsize, &action, proc_is64, (vtype == VDIR), use_fork)) != 0) {
 		VFS_DEBUG(ctx, vp, "ATTRLIST - ERROR: setup for request failed");
 		goto out;
 	}
@@ -3114,7 +3330,7 @@ get_error_attributes(vnode_t vp, struct attrlist *alp, uint64_t options,
 	fsiz = 0;
 	(void)getattrlist_setupvattr(&al, NULL, (ssize_t *)&fsiz,
 	    &action, proc_is64bit(vfs_context_proc(ctx)),
-	    (vnode_vtype(vp) == VDIR));
+	    (vnode_vtype(vp) == VDIR), (options & FSOPT_ATTR_CMN_EXTENDED));
 
 	namelen = strlen(namebuf);
 	vsiz = namelen + 1;
@@ -3595,7 +3811,7 @@ getattrlistbulk(proc_t p, struct getattrlistbulk_args *uap, int32_t *retval)
 			va.va_name = va_name;
 
 			(void)getattrlist_setupvattr_all(&al, &va, VNON, NULL,
-			    IS_64BIT_PROCESS(p));
+			    IS_64BIT_PROCESS(p), (uap->options & FSOPT_ATTR_CMN_EXTENDED));
 
 			error = VNOP_GETATTRLISTBULK(dvp, &al, &va, auio, NULL,
 			    options, &eofflag, &count, ctx);
@@ -3708,6 +3924,19 @@ setattrlist_internal(vnode_t vp, struct setattrlist_args *uap, proc_t p, vfs_con
 		error = EINVAL;
 		goto out;
 	}
+
+#if DEVELOPMENT || DEBUG
+	/*
+	 * XXX VSWAP: Check for entitlements or special flag here
+	 * so we can restrict access appropriately.
+	 */
+#else /* DEVELOPMENT || DEBUG */
+
+	if (vnode_isswap(vp) && (ctx != vfs_context_kernel())) {
+		error = EPERM;
+		goto out;
+	}
+#endif /* DEVELOPMENT || DEBUG */
 
 	VFS_DEBUG(ctx, vp, "%p  ATTRLIST - %s set common %08x vol %08x file %08x dir %08x fork %08x %sfollow on '%s'",
 	    vp, p->p_comm, al.commonattr, al.volattr, al.fileattr, al.dirattr, al.forkattr,
@@ -3894,6 +4123,11 @@ setattrlist_internal(vnode_t vp, struct setattrlist_args *uap, proc_t p, vfs_con
 	if (al.commonattr & ATTR_CMN_GRPUUID) {
 		ATTR_UNPACK(va.va_guuid);
 		VATTR_SET_ACTIVE(&va, va_guuid);
+	}
+	/* Support setattrlist of data protection class */
+	if (al.commonattr & ATTR_CMN_DATA_PROTECT_FLAGS) {
+		ATTR_UNPACK(va.va_dataprotect_class);
+		VATTR_SET_ACTIVE(&va, va_dataprotect_class);
 	}
 
 	/* volume */

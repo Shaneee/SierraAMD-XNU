@@ -39,6 +39,7 @@
 #include <machine/pal_routines.h>
 #include <i386/proc_reg.h>
 #include <os/log_private.h>
+#include <libkern/section_keywords.h>
 
 extern void conslog_putc(char);
 
@@ -49,9 +50,9 @@ void (*PE_kputc)(char c);
 /* DEBUG kernel starts with true serial, but
  * may later disable or switch to video
  * console */
-unsigned int disable_serial_output = FALSE;
+SECURITY_READ_ONLY_LATE(unsigned int) disable_serial_output = FALSE;
 #else
-unsigned int disable_serial_output = TRUE;
+SECURITY_READ_ONLY_LATE(unsigned int) disable_serial_output = TRUE;
 #endif
 unsigned int enable_conslog_kprintf = FALSE;
 
